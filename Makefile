@@ -1,5 +1,5 @@
 
 all:
-	tar --exclude='*.tgz' -cvzf workspaces.tgz *
+	tar --exclude='*.tgz' --exclude='Makefile' -cvzf workspaces.tgz *
 clean:
 	rm workspaces.tgz
