@@ -12,7 +12,7 @@
         <artifactNumToKeep>-1</artifactNumToKeep>
       </strategy>
     </jenkins.model.BuildDiscarderProperty>
-    <com.coravy.hudson.plugins.github.GithubProjectProperty plugin="github@1.21.0">
+    <com.coravy.hudson.plugins.github.GithubProjectProperty plugin="github@1.21.1">
       <projectUrl>https://github.com/kubernetes/kubernetes/</projectUrl>
       <displayName>Kuberentes upstream.</displayName>
     </com.coravy.hudson.plugins.github.GithubProjectProperty>
@@ -50,7 +50,7 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command>build/run.sh make all WHAT=&apos;cmd/kube-dns cmd/kube-proxy cmd/kube-apiserver cmd/kube-controller-manager cmd/kubelet cmd/kubemark cmd/hyperkube federation/cmd/federation-apiserver federation/cmd/federation-controller-manager plugin/cmd/kube-scheduler&apos;</command>
+      <command>build/run.sh make cross WHAT=&apos;cmd/kube-dns cmd/kube-proxy cmd/kube-apiserver cmd/kube-controller-manager cmd/kubelet cmd/kubemark cmd/hyperkube federation/cmd/federation-apiserver federation/cmd/federation-controller-manager plugin/cmd/kube-scheduler&apos;</command>
     </hudson.tasks.Shell>
     <hudson.tasks.Shell>
       <command>REGISTRY=&quot;jujusolutions&quot; VERSION=&quot;${VERSION}&quot; ARCH=&quot;amd64&quot; make -C cluster/images/hyperkube/ build</command>
@@ -61,6 +61,15 @@ docker save --output=&quot;${DOCKER_BINARY}&quot; jujusolutions/hyperkube-amd64
 echo &quot;The Docker binary is available at ${DOCKER_BINARY}&quot;</command>
     </hudson.tasks.Shell>
   </builders>
-  <publishers/>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>_output/</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
   <buildWrappers/>
 </project>
