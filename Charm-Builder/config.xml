@@ -33,22 +33,13 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
-  <triggers/>
+  <triggers>
+    <com.cloudbees.jenkins.GitHubPushTrigger plugin="github@1.21.1">
+      <spec></spec>
+    </com.cloudbees.jenkins.GitHubPushTrigger>
+  </triggers>
   <concurrentBuild>false</concurrentBuild>
   <builders>
-    <hudson.tasks.Shell>
-      <command>set +x
-echo &quot;==================================================&quot;
-echo &quot; Charm build phase&quot;
-echo &quot;==================================================&quot;
-echo &quot;&quot;
-echo &quot;&quot;
-set -x
-docker run --rm  -v $PWD:/kubernetes -w /kubernetes/cluster/juju/layers/kubernetes \
-jujusolutions/charmbox:latest \
-/usr/bin/charm build -s xenial --no-local-layers -o /kubernetes
-</command>
-    </hudson.tasks.Shell>
     <hudson.tasks.Shell>
       <command>set +x
 echo &quot;==================================================&quot;
@@ -58,21 +49,33 @@ echo &quot;&quot;
 echo &quot;&quot;
 set -x
 
-mkdir -p Builder &amp;&amp; \
-cd Builder &amp;&amp; \
-
 cp $ENV_YAML environments.yaml
 
 cat &lt;&lt; EOF &gt; Dockerfile
 FROM jujusolutions/charmbox:latest
 ADD ./environments.yaml /home/ubuntu/environments.yaml
-RUN chown -R ubuntu:ubuntu /home/ubuntu/.juju
+ADD . /kubernetes
+RUN chown -R ubuntu:ubuntu /home/ubuntu/.juju /kubernetes
 EOF
 
 docker build -t gce-charmbox .
 
-cd ..
-rm -rf Builder
+rm environments.yaml
+</command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>set +x
+echo &quot;==================================================&quot;
+echo &quot; Charm build phase&quot;
+echo &quot;==================================================&quot;
+echo &quot;&quot;
+echo &quot;&quot;
+set -x
+mkdir -p xenial
+chmod 777 xenial
+docker run --rm -u ubuntu -v $PWD/xenial:/kubernetes/xenial -w /kubernetes/cluster/juju/layers/kubernetes \
+gce-charmbox \
+/usr/bin/charm build -s xenial --no-local-layers -o /kubernetes
 </command>
     </hudson.tasks.Shell>
     <hudson.tasks.Shell>
@@ -90,7 +93,7 @@ sudo chown ubuntu:ubuntu environments.yaml &amp;&amp; \
 mv environments.yaml .juju/environments.yaml &amp;&amp; \
 juju switch gce &amp;&amp; \
 cd /home/ubuntu/xenial/kubernetes &amp;&amp; \
-/usr/local/bin/bundletester -F -l DEBUG -v 
+/usr/local/bin/bundletester -F -l DEBUG -v
 &quot;
 </command>
     </hudson.tasks.Shell>
@@ -104,18 +107,29 @@ echo &quot;&quot;
 sleep 3
 set +e
 docker rm $(docker ps -aq)
-docker rmi gce-charmbox</command>
+docker rmi gce-charmbox
+
+ls -al
+</command>
     </hudson.tasks.Shell>
   </builders>
   <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>xenial/**</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>true</onlyIfSuccessful>
+      <fingerprint>true</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+    </hudson.tasks.ArtifactArchiver>
     <hudson.plugins.ws__cleanup.WsCleanup plugin="ws-cleanup@0.30">
       <patterns class="empty-list"/>
       <deleteDirs>false</deleteDirs>
       <skipWhenFailed>false</skipWhenFailed>
       <cleanWhenSuccess>true</cleanWhenSuccess>
-      <cleanWhenUnstable>true</cleanWhenUnstable>
-      <cleanWhenFailure>true</cleanWhenFailure>
-      <cleanWhenNotBuilt>true</cleanWhenNotBuilt>
+      <cleanWhenUnstable>false</cleanWhenUnstable>
+      <cleanWhenFailure>false</cleanWhenFailure>
+      <cleanWhenNotBuilt>false</cleanWhenNotBuilt>
       <cleanWhenAborted>true</cleanWhenAborted>
       <notFailBuild>false</notFailBuild>
       <cleanupMatrixParent>false</cleanupMatrixParent>
@@ -123,11 +137,6 @@ docker rmi gce-charmbox</command>
     </hudson.plugins.ws__cleanup.WsCleanup>
   </publishers>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.30">
-      <deleteDirs>false</deleteDirs>
-      <cleanupParameter></cleanupParameter>
-      <externalDelete></externalDelete>
-    </hudson.plugins.ws__cleanup.PreBuildCleanup>
     <org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper plugin="credentials-binding@1.9">
       <bindings>
         <org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>
