@@ -33,11 +33,7 @@
   <disabled>false</disabled>
   <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
   <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
-  <triggers>
-    <com.cloudbees.jenkins.GitHubPushTrigger plugin="github@1.21.1">
-      <spec></spec>
-    </com.cloudbees.jenkins.GitHubPushTrigger>
-  </triggers>
+  <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
@@ -87,6 +83,7 @@ echo &quot;&quot;
 echo &quot;&quot;
 set -x
 set +e
+ls -al xenial/exec.d/docker-compose/
 docker run -u ubuntu -w /home/ubuntu --rm -v $PWD/xenial:/home/ubuntu/xenial gce-charmbox /bin/bash -c &quot;
 sudo chown -R ubuntu:ubuntu .juju &amp;&amp; \
 sudo chown ubuntu:ubuntu environments.yaml &amp;&amp; \
@@ -122,25 +119,17 @@ ls -al
       <defaultExcludes>true</defaultExcludes>
       <caseSensitive>true</caseSensitive>
     </hudson.tasks.ArtifactArchiver>
-    <hudson.plugins.ws__cleanup.WsCleanup plugin="ws-cleanup@0.30">
-      <patterns class="empty-list"/>
-      <deleteDirs>false</deleteDirs>
-      <skipWhenFailed>false</skipWhenFailed>
-      <cleanWhenSuccess>true</cleanWhenSuccess>
-      <cleanWhenUnstable>false</cleanWhenUnstable>
-      <cleanWhenFailure>false</cleanWhenFailure>
-      <cleanWhenNotBuilt>false</cleanWhenNotBuilt>
-      <cleanWhenAborted>true</cleanWhenAborted>
-      <notFailBuild>false</notFailBuild>
-      <cleanupMatrixParent>false</cleanupMatrixParent>
-      <externalDelete></externalDelete>
-    </hudson.plugins.ws__cleanup.WsCleanup>
   </publishers>
   <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.30">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
     <org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper plugin="credentials-binding@1.9">
       <bindings>
         <org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>
-          <credentialsId>ENV_YAML</credentialsId>
+          <credentialsId>JUJU_ENV_YAML_GCE</credentialsId>
           <variable>ENV_YAML</variable>
         </org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>
       </bindings>

@@ -69,7 +69,7 @@ git checkout ${GIT_BRANCH_TO_BUILD}</command>
     <com.cloudbees.dockerpublish.DockerBuilder plugin="docker-build-publish@1.3.1">
       <server plugin="docker-commons@1.4.0"/>
       <registry plugin="docker-commons@1.4.0">
-        <credentialsId>3a76589f-9fa0-48e0-acec-5454c9b7d4d6</credentialsId>
+        <credentialsId>dockerhub-jujusolutions-team</credentialsId>
       </registry>
       <repoName>jujusolutions/jujubox</repoName>
       <noCache>true</noCache>
