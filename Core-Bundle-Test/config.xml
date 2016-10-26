@@ -17,12 +17,12 @@
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
-        <url>https://github.com/juju-solutions/kubernetes.git</url>
+        <url>https://github.com/juju-solutions/bundle-kubernetes-core.git</url>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/juju-release-v1.4.0</name>
+        <name>*/master</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -36,6 +36,16 @@
   <triggers/>
   <concurrentBuild>false</concurrentBuild>
   <builders>
+    <hudson.plugins.copyartifact.CopyArtifact plugin="copyartifact@1.38.1">
+      <project>Charm-Builder</project>
+      <filter></filter>
+      <target>charm</target>
+      <excludes></excludes>
+      <selector class="hudson.plugins.copyartifact.StatusBuildSelector">
+        <stable>true</stable>
+      </selector>
+      <doNotFingerprintArtifacts>false</doNotFingerprintArtifacts>
+    </hudson.plugins.copyartifact.CopyArtifact>
     <hudson.tasks.Shell>
       <command>set +x
 echo &quot;==================================================&quot;
@@ -49,12 +59,12 @@ cp $ENV_YAML environments.yaml
 
 cat &lt;&lt; EOF &gt; Dockerfile
 FROM jujusolutions/charmbox:latest
-ADD ./environments.yaml /home/ubuntu/environments.yaml
-ADD . /kubernetes
-RUN chown -R ubuntu:ubuntu /home/ubuntu/.juju /kubernetes
+ADD ./environments.yaml /home/ubuntu/.juju/environments.yaml
+RUN chown -R ubuntu:ubuntu /home/ubuntu/.juju 
+RUN chown -R ubuntu:ubuntu /home/ubuntu/.juju/environments.yaml
 EOF
 
-docker build -t gce-charmbox .
+docker build -t gce-bundlebox .
 
 rm environments.yaml
 </command>
@@ -62,35 +72,21 @@ rm environments.yaml
     <hudson.tasks.Shell>
       <command>set +x
 echo &quot;==================================================&quot;
-echo &quot; Charm build phase&quot;
-echo &quot;==================================================&quot;
-echo &quot;&quot;
-echo &quot;&quot;
-set -x
-mkdir -p xenial
-chmod 777 xenial
-docker run --rm -u ubuntu -v $PWD/xenial:/kubernetes/xenial -w /kubernetes/cluster/juju/layers/kubernetes \
-gce-charmbox \
-/usr/bin/charm build -s xenial --no-local-layers -o /kubernetes
-</command>
-    </hudson.tasks.Shell>
-    <hudson.tasks.Shell>
-      <command>set +x
-echo &quot;==================================================&quot;
-echo &quot; Bootstrap &amp; charm test phase&quot;
+echo &quot; Bootstrap &amp; bundle test phase&quot;
 echo &quot;==================================================&quot;
 echo &quot;&quot;
 echo &quot;&quot;
 set -x
 set +e
-ls -al xenial/exec.d/docker-compose/
-docker run -u ubuntu -w /home/ubuntu --rm -v $PWD/xenial:/home/ubuntu/xenial gce-charmbox /bin/bash -c &quot;
-sudo chown -R ubuntu:ubuntu .juju &amp;&amp; \
-sudo chown ubuntu:ubuntu environments.yaml &amp;&amp; \
-mv environments.yaml .juju/environments.yaml &amp;&amp; \
-juju switch gce &amp;&amp; \
-cd /home/ubuntu/xenial/kubernetes &amp;&amp; \
-/usr/local/bin/bundletester -F -l DEBUG -v
+sed -i.bak &apos;s|cs:xenial/kubernetes-[0-9]|/home/ubuntu/xenial/kubernetes|&apos; bundle.yaml
+cat bundle.yaml
+tree .
+
+docker run -u ubuntu -w /home/ubuntu/bundle --rm -v $PWD/charm/xenial:/home/ubuntu/xenial -v $PWD:/home/ubuntu/bundle gce-bundlebox /bin/bash -c &quot;
+sudo chown -R ubuntu:ubuntu /home/ubuntu/.juju
+juju switch gce
+/usr/local/bin/bundletester -F -l DEBUG -v -x etcd -x kubernetes
+juju destroy-environment -y --force gce
 &quot;
 </command>
     </hudson.tasks.Shell>
@@ -104,28 +100,28 @@ echo &quot;&quot;
 sleep 3
 set +e
 docker rm $(docker ps -aq)
-docker rmi gce-charmbox
+docker rmi gce-bundlebox
 
 ls -al
 </command>
     </hudson.tasks.Shell>
   </builders>
   <publishers>
-    <hudson.tasks.ArtifactArchiver>
-      <artifacts>xenial/**</artifacts>
-      <allowEmptyArchive>false</allowEmptyArchive>
-      <onlyIfSuccessful>true</onlyIfSuccessful>
-      <fingerprint>true</fingerprint>
-      <defaultExcludes>true</defaultExcludes>
-      <caseSensitive>true</caseSensitive>
-    </hudson.tasks.ArtifactArchiver>
+    <hudson.plugins.ws__cleanup.WsCleanup plugin="ws-cleanup@0.30">
+      <patterns class="empty-list"/>
+      <deleteDirs>false</deleteDirs>
+      <skipWhenFailed>false</skipWhenFailed>
+      <cleanWhenSuccess>true</cleanWhenSuccess>
+      <cleanWhenUnstable>true</cleanWhenUnstable>
+      <cleanWhenFailure>true</cleanWhenFailure>
+      <cleanWhenNotBuilt>true</cleanWhenNotBuilt>
+      <cleanWhenAborted>true</cleanWhenAborted>
+      <notFailBuild>true</notFailBuild>
+      <cleanupMatrixParent>false</cleanupMatrixParent>
+      <externalDelete></externalDelete>
+    </hudson.plugins.ws__cleanup.WsCleanup>
   </publishers>
   <buildWrappers>
-    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.30">
-      <deleteDirs>false</deleteDirs>
-      <cleanupParameter></cleanupParameter>
-      <externalDelete></externalDelete>
-    </hudson.plugins.ws__cleanup.PreBuildCleanup>
     <org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper plugin="credentials-binding@1.9">
       <bindings>
         <org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>

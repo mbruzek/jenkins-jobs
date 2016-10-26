@@ -1,0 +1,109 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>This job runs the kube-up.sh and kube-down.sh scripts.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@2.5.3">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/juju-solutions/kubernetes.git</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>set +x
+echo ==================================================
+echo Build a Docker container with the secrets.
+echo ==================================================
+echo 
+set -x
+
+cp $CREDS_YAML credentials.yaml
+
+cat &lt;&lt; EOF &gt; Dockerfile
+FROM jujusolutions/charmbox:devel
+RUN mkdir -p /home/ubuntu/.local/share/juju
+ADD ./credentials.yaml /home/ubuntu/.local/share/juju/credentials.yaml
+RUN chown ubuntu:ubuntu /home/ubuntu/.local/share/juju/credentials.yaml
+EOF
+
+docker build -t juju-2-container .
+
+rm credentials.yaml</command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>set +x
+echo ==================================================
+echo Bootstrap the Juju google provider.
+echo ==================================================
+echo 
+set -x
+cat &lt;&lt; EOF &gt; bootstrap_kube-up.sh
+juju bootstrap amazon aws
+juju add-model jenkins-test-model
+cd kubernetes
+cluster/kube-up.sh
+EOF
+chmod +x bootstrap_kube-up.sh
+docker run --rm \
+-u ubuntu \
+-e KUBERNETES_PROVIDER=juju \
+-v $PWD:/home/ubuntu/kubernetes \
+-v $PWD/bootstrap_kube-up.sh:/home/ubuntu/bootstrap_kube-up.sh \
+-w /home/ubuntu/ \
+juju-2-container \
+/home/ubuntu/bootstrap_kube-up.sh </command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>set +x
+echo ==================================================
+echo Run the kube-down.sh script.
+echo ==================================================
+echo 
+set -x</command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>set +x
+echo &quot;==================================================&quot;
+echo &quot; Cleanup with a hammer phase&quot;
+echo &quot;==================================================&quot;
+echo &quot;&quot;
+echo &quot;&quot;
+sleep 3
+set +e
+docker rm $(docker ps -aq)
+docker rmi gce-charmbox
+
+ls -al
+</command>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper plugin="credentials-binding@1.9">
+      <bindings>
+        <org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>
+          <credentialsId>8247058a-085f-4854-a3e7-243a488e9310</credentialsId>
+          <variable>CREDS_YAML</variable>
+        </org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>
+      </bindings>
+    </org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper>
+  </buildWrappers>
+</project>
