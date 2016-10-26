@@ -1,0 +1,85 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Build the Kubernetes hyperkube docker image in Jenkins.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>VERSION</name>
+          <description>The version of Kubernetes to pull and build.</description>
+          <defaultValue>v1.4.0</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>ARCH</name>
+          <description>The architecture to build the hyperkube image.</description>
+          <defaultValue>amd64</defaultValue>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@3.0.0">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>https://github.com/kubernetes/kubernetes.git</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>git checkout -f $VERSION</command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>echo Building the hyperkube binary `date`
+
+build/run.sh make all \
+	WHAT=&apos;cmd/hyperkube\
+          cmd/kubectl&apos;
+
+echo The hyperkube build completed `date`
+
+</command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>echo Building the hyperkube docker container.
+
+REGISTRY=&quot;jujusolutions&quot; VERSION=&quot;${VERSION}&quot; ARCH=&quot;${ARCH}&quot; make -C cluster/images/hyperkube/ build
+
+echo The hyperkube docker container finished building `date`</command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>echo Saving the hyperkube docker container to a file.
+
+DOCKER_BINARY=$WORKSPACE/kubernetes-hyperkube-$ARCH-$VERSION.tar
+docker save --output=&quot;${DOCKER_BINARY}&quot; jujusolutions/hyperkube-$ARCH
+echo &quot;The Docker binary is available at ${DOCKER_BINARY}&quot;</command>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>kubernetes-hyperkube-*</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
+  <buildWrappers/>
+</project>
