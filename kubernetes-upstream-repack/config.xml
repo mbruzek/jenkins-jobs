@@ -15,9 +15,9 @@
     <hudson.model.ParametersDefinitionProperty>
       <parameterDefinitions>
         <hudson.model.StringParameterDefinition>
-          <name>KUBERNETES_RESOURCE</name>
+          <name>VERSION</name>
           <description>Kubernetes Release tarball http/https url</description>
-          <defaultValue>https://github.com/kubernetes/kubernetes/releases/download/v1.4.4/kubernetes.tar.gz</defaultValue>
+          <defaultValue>v1.4.5</defaultValue>
         </hudson.model.StringParameterDefinition>
       </parameterDefinitions>
     </hudson.model.ParametersDefinitionProperty>
@@ -26,13 +26,12 @@
     <configVersion>2</configVersion>
     <userRemoteConfigs>
       <hudson.plugins.git.UserRemoteConfig>
-        <url>git@github.com:chuckbutler/container-utils.git</url>
-        <credentialsId>jenkins_github_credential</credentialsId>
+        <url>https://github.com/juju-solutions/container-utils.git</url>
       </hudson.plugins.git.UserRemoteConfig>
     </userRemoteConfigs>
     <branches>
       <hudson.plugins.git.BranchSpec>
-        <name>*/ci-run</name>
+        <name>*/master</name>
       </hudson.plugins.git.BranchSpec>
     </branches>
     <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
@@ -53,11 +52,13 @@ if [ -f kubernetes.tar.gz ]; then
   rm -rf kubernetes.tar.gz
 fi
 
-wget $KUBERNETES_RESOURCE -o kubernetes.tar.gz
+KUBERNETES_RESOURCE=https://github.com/kubernetes/kubernetes/releases/download/${VERSION}/kubernetes.tar.gz
+
+curl -O -J -L $KUBERNETES_RESOURCE
 
 ls -al
 
-./package_kubernetes.sh $PWD/kubernetes.tar.gz.1</command>
+./package_kubernetes.sh $PWD/kubernetes.tar.gz</command>
     </hudson.tasks.Shell>
   </builders>
   <publishers>
@@ -69,19 +70,6 @@ ls -al
       <defaultExcludes>true</defaultExcludes>
       <caseSensitive>true</caseSensitive>
     </hudson.tasks.ArtifactArchiver>
-    <hudson.plugins.ws__cleanup.WsCleanup plugin="ws-cleanup@0.30">
-      <patterns class="empty-list"/>
-      <deleteDirs>false</deleteDirs>
-      <skipWhenFailed>false</skipWhenFailed>
-      <cleanWhenSuccess>true</cleanWhenSuccess>
-      <cleanWhenUnstable>true</cleanWhenUnstable>
-      <cleanWhenFailure>true</cleanWhenFailure>
-      <cleanWhenNotBuilt>true</cleanWhenNotBuilt>
-      <cleanWhenAborted>true</cleanWhenAborted>
-      <notFailBuild>false</notFailBuild>
-      <cleanupMatrixParent>false</cleanupMatrixParent>
-      <externalDelete></externalDelete>
-    </hudson.plugins.ws__cleanup.WsCleanup>
   </publishers>
   <buildWrappers>
     <hudson.plugins.timestamper.TimestamperBuildWrapper plugin="timestamper@1.8.7"/>
