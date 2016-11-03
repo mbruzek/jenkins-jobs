@@ -41,15 +41,40 @@
       <command>git checkout -f ${VERSION}</command>
     </hudson.tasks.Shell>
     <hudson.tasks.Shell>
-      <command># If we had go installed the command to build e2e.test is:
+      <command>echo Starting e2e run at `date`
+
+# If we had go installed the command to build e2e.test is:
 # go run hack/e2e.go -v --build
 # Use the docker container instead:
-build/run.sh make WHAT=&apos;cmd/kubectl test/e2e/e2e.test&apos;</command>
+build/run.sh make WHAT=&apos;cmd/kubectl test/e2e/e2e.test&apos;
+build/run.sh make ginkgo</command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>ARCHITECTURES=&quot;amd64 arm64 ppc64le s390x&quot;
+echo &quot;Creating resources for ${ARCHITECTURES}&quot;
+
+# Loop through the array of architectures to build resources.
+for ARCH in ${ARCHITECTURES}; do
+  ARCH_DIR=$WORKSPACE/_output/dockerized/bin/linux/$ARCH
+  # Can not build the resource if the architecture directory does not exist.
+  if [ -d $ARCH_DIR ]; then
+    cd $ARCH_DIR
+    # Create the kubernetes-master resource.
+    echo &quot;Creating the ${WORKSPACE}/e2e-${VERSION}-${ARCH}.tar.gz file.&quot;
+    E2E_BINS=&quot;e2e.test kubectl ginkgo&quot;
+    tar -cvzf $WORKSPACE/e2e-$VERSION-$ARCH.tar.gz $E2E_BINS
+    
+    cd $WORKSPACE
+  else
+    echo &quot;Missing architecture: ${ARCH}&quot;
+  fi
+done
+echo Resources built `date`</command>
     </hudson.tasks.Shell>
   </builders>
   <publishers>
     <hudson.tasks.ArtifactArchiver>
-      <artifacts>_output/</artifacts>
+      <artifacts>_output/,e2e*</artifacts>
       <allowEmptyArchive>false</allowEmptyArchive>
       <onlyIfSuccessful>false</onlyIfSuccessful>
       <fingerprint>false</fingerprint>
@@ -57,5 +82,11 @@ build/run.sh make WHAT=&apos;cmd/kubectl test/e2e/e2e.test&apos;</command>
       <caseSensitive>true</caseSensitive>
     </hudson.tasks.ArtifactArchiver>
   </publishers>
-  <buildWrappers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.30">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
 </project>

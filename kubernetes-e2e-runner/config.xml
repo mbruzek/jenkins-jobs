@@ -1,0 +1,111 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>This job deploys a kubernetes cluster, and the kubernetes-e2e charm, runs the action to test the cluster and archives the results. UNFINISHED</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>JENKINS_JUJU_DATA</name>
+          <description>The directory that contains the Juju data on the Jenkins host.</description>
+          <defaultValue>$WORKSPACE/juju</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>DOCKER_JUJU_DATA</name>
+          <description>The directory that contains the Juju data on the Docker guest.</description>
+          <defaultValue>/home/ubuntu/.local/share/juju</defaultValue>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command># Uncompress the file that contains the Juju data to the workspace directory.
+tar -xvzf $JUJU_GCE_DATA -C $WORKSPACE
+
+MODEL=&quot;jenkins-e2e-${BUILD_ID}&quot;
+
+docker run \
+  -u ubuntu \
+  -e &quot;HOME=/home/ubuntu&quot; \
+  -w /home/ubuntu/ \
+  -v $JENKINS_JUJU_DATA:$DOCKER_JUJU_DATA \
+  jujusolutions/jujubox:devel \
+  sh -c &quot;sudo chown -R ubuntu:ubuntu $DOCKER_JUJU_DATA &amp;&amp; juju add-model ${MODEL}&quot;
+
+</command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>git clone https://github.com/juju-solutions/bundle-e2e-tests
+cd bundle-e2e-tests
+# This test simply deploys a kubernetes cluster (with contraints) and waits for messages.
+tests/10-deploy.py
+</command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command># Deploy the e2e charm/bundle.
+docker run \
+  -u ubuntu \
+  -e &quot;HOME=/home/ubuntu&quot; \
+  -w /home/ubuntu/ \
+  -v $JENKINS_JUJU_DATA:$DOCKER_JUJU_DATA \
+  jujusolutions/jujubox:devel \
+  sh -c &quot;juju deploy cs:~containers/kubernetes-e2e&quot;
+
+# Do not return from this block until this deployment has completed.
+docker run \
+  -u ubuntu \
+  -e &quot;HOME=/home/ubuntu&quot; \
+  -w /home/ubuntu/ \
+  -v $JENKINS_JUJU_DATA:$DOCKER_JUJU_DATA \
+  jujusolutions/jujubox:devel \
+  sh -c &quot;sudo pip install juju-wait &amp;&amp; juju-wait -t 3600&quot;
+</command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command># Run the action.
+docker run \
+  -u ubuntu \
+  -e &quot;HOME=/home/ubuntu&quot; \
+  -w /home/ubuntu/ \
+  -v $JENKINS_JUJU_DATA:$DOCKER_JUJU_DATA \
+  jujusolutions/jujubox:devel \
+  sh -c &quot;juju action-run&quot;</command>
+    </hudson.tasks.Shell>
+    <hudson.tasks.Shell>
+      <command>MODEL=&quot;jenkins-e2e-${BUILD_ID}&quot;
+
+docker run \
+  -u ubuntu \
+  -e &quot;HOME=/home/ubuntu&quot; \
+  -w /home/ubuntu/ \
+  -v $JENKINS_JUJU_DATA:$DOCKER_JUJU_DATA \
+  jujusolutions/jujubox:devel \
+  sh -c &quot;juju destroy-model ${MODEL}&quot;</command>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.30">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+    <org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper plugin="credentials-binding@1.9">
+      <bindings>
+        <org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>
+          <credentialsId>JUJU_GCE_DATA_TARBALL</credentialsId>
+          <variable>JUJU_GCE_DATA</variable>
+        </org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>
+      </bindings>
+    </org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper>
+  </buildWrappers>
+</project>
