@@ -28,71 +28,106 @@
   <concurrentBuild>false</concurrentBuild>
   <builders>
     <hudson.tasks.Shell>
-      <command># Uncompress the file that contains the Juju data to the workspace directory.
+      <command>#!/bin/bash
+set -eux
+
+function in-devbox {
+  command=$@
+  docker run \
+    -u ubuntu \
+    -e &quot;HOME=/home/ubuntu&quot; \
+    -w /home/ubuntu/ \
+    -v $JENKINS_JUJU_DATA:$DOCKER_JUJU_DATA \
+    -v $WORKSPACE:/home/ubuntu/jenkins-workspace \
+    jujusolutions/jujubox:devel \
+    sh -c &quot;$command&quot;
+}
+
+function juju {
+  args=$@
+  in-devbox juju $args
+}
+
+# Uncompress the file that contains the Juju data to the workspace directory.
 tar -xvzf $JUJU_GCE_DATA -C $WORKSPACE
 
+# Create model and set up exit handler to clean it up
 MODEL=&quot;jenkins-e2e-${BUILD_ID}&quot;
+in-devbox &quot;sudo chown -R ubuntu:ubuntu $DOCKER_JUJU_DATA &amp;&amp; juju add-model $MODEL&quot;
+trap &quot;juju destroy-model -y $MODEL&quot; EXIT
 
-docker run \
-  -u ubuntu \
-  -e &quot;HOME=/home/ubuntu&quot; \
-  -w /home/ubuntu/ \
-  -v $JENKINS_JUJU_DATA:$DOCKER_JUJU_DATA \
-  jujusolutions/jujubox:devel \
-  sh -c &quot;sudo chown -R ubuntu:ubuntu $DOCKER_JUJU_DATA &amp;&amp; juju add-model ${MODEL}&quot;
+# Deploy the e2e charm/bundle.
+juju deploy cs:~containers/kubernetes-core
+juju deploy cs:~containers/kubernetes-e2e
+juju add-unit kubernetes-worker
+juju relate kubernetes-e2e kubernetes-master
+juju relate kubernetes-e2e easyrsa
 
+# Wait for ready
+set +x
+until juju status | grep &quot;Ready to test.&quot;; do
+  juju status
+  sleep 10
+done
+until [ &quot;$(juju status | grep &quot;Kubernetes worker running.&quot; | wc -l)&quot; -eq &quot;2&quot; ]; do
+  juju status
+  sleep 10
+done
+
+# Run and wait for e2e action
+action_id=$(juju run-action kubernetes-e2e/0 test | cut -d &quot; &quot; -f 5)
+while juju show-action-status $action_id | grep pending || juju show-action-status $action_id | grep running; do
+  sleep 1
+done
+juju show-action-status $action_id
+
+# Download results
+set -x
+in-devbox &quot;juju scp kubernetes-e2e/0:$action_id.log.tar.gz /tmp/e2e.log.tar.gz; sudo mv /tmp/e2e.log.tar.gz ./jenkins-workspace&quot;
+in-devbox &quot;juju scp kubernetes-e2e/0:$action_id-junit.tar.gz /tmp/e2e-junit.tar.gz; sudo mv /tmp/e2e-junit.tar.gz ./jenkins-workspace&quot;
+
+
+# fetch the gubernator script and dependencies
+wget https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/lib/logging.sh
+wget https://gist.githubusercontent.com/mbruzek/80ed41d90dd301e4dca0f10b18ef4563/raw/b67c3c7b2d56ad0c737ce5db9ffcf18a938b447e/gubernator.sh
+chmod +x gubernator.sh
+
+
+docker rm gcloud-config
+# pre-req config requirements
+CONFIG_CONTAINER=$(docker ps -aq -f name=gcloud-config)                                                                                   
+echo $CONFIG_CONTAINER                                                                                                                    
+                                                                                                                                          
+# This script assumes there is a gce.json file in $PWD.                                                                                   
+# Suggested to put this service account credential (.p12) file in a Jenkins Secret                                                        
+if [ -z $CONFIG_CONTAINER ]; then                                                                                                         
+  docker run -v $GCE_ACCOUNT_CREDENTIAL:/root/gce.json --name gcloud-config google/cloud-sdk gcloud auth activate-service-account --key-file /root/gce.json --project ubuntu-benchmarking                                        
+fi
+
+ARTIFACTS=$PWD/artifacts
+
+# Extract tarball results into the artifacts directory
+mkdir -p $ARTIFACTS
+tar xvfz $WORKSPACE/e2e-junit.tar.gz -C $ARTIFACTS
+tar xvfz $WORKSPACE/e2e.log.tar.gz -C $ARTIFACTS
+
+# Rename the action_id to build-log.txt
+mv $ARTIFACTS/${action_id}.log $ARTIFACTS/build-log.txt
+
+ARTIFACTS=$PWD/artifacts ./gubernator.sh
 </command>
-    </hudson.tasks.Shell>
-    <hudson.tasks.Shell>
-      <command>git clone https://github.com/juju-solutions/bundle-e2e-tests
-cd bundle-e2e-tests
-# This test simply deploys a kubernetes cluster (with contraints) and waits for messages.
-tests/10-deploy.py
-</command>
-    </hudson.tasks.Shell>
-    <hudson.tasks.Shell>
-      <command># Deploy the e2e charm/bundle.
-docker run \
-  -u ubuntu \
-  -e &quot;HOME=/home/ubuntu&quot; \
-  -w /home/ubuntu/ \
-  -v $JENKINS_JUJU_DATA:$DOCKER_JUJU_DATA \
-  jujusolutions/jujubox:devel \
-  sh -c &quot;juju deploy cs:~containers/kubernetes-e2e&quot;
-
-# Do not return from this block until this deployment has completed.
-docker run \
-  -u ubuntu \
-  -e &quot;HOME=/home/ubuntu&quot; \
-  -w /home/ubuntu/ \
-  -v $JENKINS_JUJU_DATA:$DOCKER_JUJU_DATA \
-  jujusolutions/jujubox:devel \
-  sh -c &quot;sudo pip install juju-wait &amp;&amp; juju-wait -t 3600&quot;
-</command>
-    </hudson.tasks.Shell>
-    <hudson.tasks.Shell>
-      <command># Run the action.
-docker run \
-  -u ubuntu \
-  -e &quot;HOME=/home/ubuntu&quot; \
-  -w /home/ubuntu/ \
-  -v $JENKINS_JUJU_DATA:$DOCKER_JUJU_DATA \
-  jujusolutions/jujubox:devel \
-  sh -c &quot;juju action-run&quot;</command>
-    </hudson.tasks.Shell>
-    <hudson.tasks.Shell>
-      <command>MODEL=&quot;jenkins-e2e-${BUILD_ID}&quot;
-
-docker run \
-  -u ubuntu \
-  -e &quot;HOME=/home/ubuntu&quot; \
-  -w /home/ubuntu/ \
-  -v $JENKINS_JUJU_DATA:$DOCKER_JUJU_DATA \
-  jujusolutions/jujubox:devel \
-  sh -c &quot;juju destroy-model ${MODEL}&quot;</command>
     </hudson.tasks.Shell>
   </builders>
-  <publishers/>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>e2e.log.tar.gz, e2e-junit.tar.gz</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
   <buildWrappers>
     <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.30">
       <deleteDirs>false</deleteDirs>
@@ -104,6 +139,10 @@ docker run \
         <org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>
           <credentialsId>JUJU_GCE_DATA_TARBALL</credentialsId>
           <variable>JUJU_GCE_DATA</variable>
+        </org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>
+        <org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>
+          <credentialsId>GCE_SERVICE_ACCOUNT_CREDENTIAL</credentialsId>
+          <variable>GCE_ACCOUNT_CREDENTIAL</variable>
         </org.jenkinsci.plugins.credentialsbinding.impl.FileBinding>
       </bindings>
     </org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper>
