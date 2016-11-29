@@ -89,7 +89,7 @@ in-devbox &quot;juju scp kubernetes-e2e/0:$action_id-junit.tar.gz /tmp/e2e-junit
 
 # fetch the gubernator script and dependencies
 wget https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/lib/logging.sh
-wget https://gist.githubusercontent.com/mbruzek/80ed41d90dd301e4dca0f10b18ef4563/raw/b67c3c7b2d56ad0c737ce5db9ffcf18a938b447e/gubernator.sh
+wget https://github.com/juju-solutions/container-utils/blob/master/test-infra/gubernator.sh
 chmod +x gubernator.sh
 
 
@@ -114,7 +114,7 @@ tar xvfz $WORKSPACE/e2e.log.tar.gz -C $ARTIFACTS
 # Rename the action_id to build-log.txt
 mv $ARTIFACTS/${action_id}.log $ARTIFACTS/build-log.txt
 
-ARTIFACTS=$PWD/artifacts ./gubernator.sh
+GCS_JOBS_PATH=gs://canonical-kubernetes-tests/logs/gce/e2e-node ARTIFACTS=$PWD/artifacts ./gubernator.sh
 </command>
     </hudson.tasks.Shell>
   </builders>
