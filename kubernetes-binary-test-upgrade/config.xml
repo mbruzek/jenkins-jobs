@@ -1,0 +1,96 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>Clone the kubernetes core bundle, copy the binary resources, deploy the bundle with charm store resources, test the bundle, attach the built resources and test the bundle.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@3.0.0">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>http://github.com/juju-solutions/bundle-kubernetes-core.git</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers>
+    <jenkins.triggers.ReverseBuildTrigger>
+      <spec></spec>
+      <upstreamProjects>kubernetes-binary-package</upstreamProjects>
+      <threshold>
+        <name>SUCCESS</name>
+        <ordinal>0</ordinal>
+        <color>BLUE</color>
+        <completeBuild>true</completeBuild>
+      </threshold>
+    </jenkins.triggers.ReverseBuildTrigger>
+  </triggers>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.plugins.copyartifact.CopyArtifact plugin="copyartifact@1.38.1">
+      <project>kubernetes-binary-package</project>
+      <filter>kubernetes-master-*-amd64.tar.gz,kubernetes-worker-*-amd64.tar.gz</filter>
+      <target></target>
+      <excludes></excludes>
+      <selector class="hudson.plugins.copyartifact.StatusBuildSelector"/>
+      <doNotFingerprintArtifacts>false</doNotFingerprintArtifacts>
+    </hudson.plugins.copyartifact.CopyArtifact>
+    <hudson.tasks.Shell>
+      <command>
+# Create a new model for this job.
+echo juju add-model $BUILD_TAG
+
+# Set test-mode so our deploys do not inflate the numbers.
+echo juju model-config test-mode=1
+
+# Set a trap to destroy the model on exit of this script.
+trap &quot;echo juju destroy-model -y $BUILD_TAG&quot; EXIT
+
+# Deploy the kubernetes-core bundle with the resources from the charm store.
+echo juju deploy ./bundle.yaml
+
+# Run tests on the bundle with resources from the charm store.
+echo &apos;bundletester -l DEBUG -v 2&gt;&amp;1&apos; | tee bundletester_original_results.txt
+
+# Attach the built resource to kubernetes-master.
+echo KUBERNETES_MASTER=$(ls ./kubernetes-master-*-amd64.tar.gz)
+echo juju attach kubernetes-master kubernetes=$KUBERNETES_MASTER
+
+# Attach the built resource to kubernetes-worker.
+echo KUBERNETES_WORKER=$(ls ./kubernetes-worker-*-amd64.tar.gz)
+echo juju attach kubernetes-worker kubernetes=$KUBERNETES_WORKER
+
+# Run bundletests after the resources have been upgraded.
+echo &apos;bundletester -l DEBUG -v 2&gt;&amp;1&apos; | tee bundletester_upgrade_results.txt
+</command>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <hudson.tasks.ArtifactArchiver>
+      <artifacts>bundletester_original_results.txt,bundletester_upgrade_results.txt</artifacts>
+      <allowEmptyArchive>false</allowEmptyArchive>
+      <onlyIfSuccessful>false</onlyIfSuccessful>
+      <fingerprint>false</fingerprint>
+      <defaultExcludes>true</defaultExcludes>
+      <caseSensitive>true</caseSensitive>
+    </hudson.tasks.ArtifactArchiver>
+  </publishers>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.30">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+  </buildWrappers>
+</project>
